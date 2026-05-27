@@ -748,7 +748,7 @@ function initGame() {
 
   player = new Tank(
     Math.floor(COLS / 2) * CELL,
-    (ROWS - 2) * CELL,
+    (ROWS - 4) * CELL,
     DIR.UP,
     '#4caf50',
     true
@@ -874,7 +874,7 @@ function showLevelScreen() {
     levelTransition = false;
     map = generateMap();
     player.x = Math.floor(COLS / 2) * CELL;
-    player.y = (ROWS - 2) * CELL;
+    player.y = (ROWS - 4) * CELL;
     player.alive = true;
     player.dir = DIR.UP;
     player.moveDir = DIR.UP;
@@ -1057,7 +1057,7 @@ function update() {
             setTimeout(() => {
               if (gameOver) return;
               player.x = Math.floor(COLS / 2) * CELL;
-              player.y = (ROWS - 2) * CELL;
+              player.y = (ROWS - 4) * CELL;
               player.alive = true;
               player.hp = player.maxHp;
               player.dir = DIR.UP;
