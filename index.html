@@ -658,6 +658,11 @@ function spawnEnemies(count) {
 // Input
 window.addEventListener('keydown', e => {
   keys[e.key] = true;
+  if (e.key === ' ' || e.key === 'j' || e.key === 'J') {
+    tryPlayerShoot();
+    e.preventDefault();
+    return;
+  }
   if (e.key === 'Enter' || e.key === 'r') {
     if (gameOver) restartGame();
   }
@@ -668,15 +673,17 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => { keys[e.key] = false; });
 
-// Mouse click to shoot
-canvas.addEventListener('click', e => {
+// Mouse / pointer to shoot (mousedown for immediate response)
+function tryPlayerShoot() {
   if (!player.alive || gameOver || levelTransition) return;
   const bulletsArr = player.shoot();
   if (bulletsArr) {
     bulletsArr.forEach(b => bullets.push(b));
-    playerShootCooldown = 12;
     playSound(600, 0.08, 'square', 0.03);
   }
+}
+canvas.addEventListener('mousedown', e => {
+  if (e.button === 0) { tryPlayerShoot(); e.preventDefault(); }
 });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -697,14 +704,7 @@ function setDir(dir) {
   mobileDir = dir;
 }
 function mobileFire() {
-  if (player.alive && playerShootCooldown <= 0 && !gameOver && !levelTransition) {
-    const bulletsArr = player.shoot();
-    if (bulletsArr) {
-      bulletsArr.forEach(b => bullets.push(b));
-      playerShootCooldown = 12;
-      playSound(600, 0.08, 'square', 0.03);
-    }
-  }
+  tryPlayerShoot();
 }
 let mobileDir = null;
 
