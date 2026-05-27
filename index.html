@@ -113,6 +113,103 @@ canvas { display: block; background: #0f0f23; }
   border-color: #e94560;
 }
 @media (max-width: 700px) { .mobile-controls { display: grid; grid-template-columns: repeat(3, auto); grid-template-rows: repeat(2, auto); } }
+#help-btn {
+  pointer-events: all;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.3);
+  background: rgba(0,0,0,0.6);
+  color: #aaa;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1;
+}
+#help-btn:hover { color: #fff; border-color: #e94560; }
+#help-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.92);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  color: #ccc;
+  padding: 20px;
+  overflow-y: auto;
+}
+#help-overlay .manual {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 24px 28px;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90%;
+  overflow-y: auto;
+}
+#help-overlay h2 {
+  text-align: center;
+  color: #e94560;
+  font-size: 22px;
+  margin-bottom: 16px;
+  letter-spacing: 3px;
+}
+#help-overlay h3 {
+  color: #ff9800;
+  font-size: 14px;
+  margin: 14px 0 6px;
+  border-bottom: 1px solid #2a2a2a;
+  padding-bottom: 4px;
+}
+#help-overlay .row {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+  font-size: 13px;
+}
+#help-overlay .key {
+  display: inline-block;
+  background: #2a2a2a;
+  color: #fff;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 12px;
+  border: 1px solid #444;
+  min-width: 20px;
+  text-align: center;
+  font-family: inherit;
+}
+#help-overlay .key.highlight { color: #ffeb3b; border-color: #ffeb3b; }
+#help-overlay .tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: bold;
+}
+.tag-brick { background: #8b4513; color: #ffcc80; }
+.tag-steel { background: #757575; color: #e0e0e0; }
+.tag-base  { background: #b8860b; color: #ffe082; }
+.tag-enemy { background: #c62828; color: #ffcdd2; }
+.tag-player { background: #2e7d32; color: #c8e6c9; }
+#help-overlay .note { color: #888; font-size: 11px; text-align: center; margin-top: 14px; }
+#close-help-btn {
+  pointer-events: all;
+  margin-top: 12px;
+  padding: 8px 30px;
+  font-size: 14px;
+  font-family: inherit;
+  background: #e94560;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  letter-spacing: 1px;
+}
+#close-help-btn:hover { background: #ff6b81; }
 </style>
 </head>
 <body>
@@ -124,6 +221,7 @@ canvas { display: block; background: #0f0f23; }
     <div class="ui-panel">🎯 关卡 <span id="level">1</span></div>
     <div class="ui-panel">❤️ <span id="lives">3</span></div>
     <div class="ui-panel">💥 <span id="enemies">0</span></div>
+  <button id="help-btn" onclick="toggleHelp()" title="帮助 / 说明书">?</button>
   </div>
   <div id="game-over-screen">
     <h1 id="go-title">GAME OVER</h1>
@@ -140,6 +238,48 @@ canvas { display: block; background: #0f0f23; }
     <button style="grid-column:3;grid-row:2;" ontouchstart="setDir('right')" ontouchend="setDir(null)" onmousedown="setDir('right')" onmouseup="setDir(null)">▶</button>
     <button style="grid-column:2;grid-row:2;" ontouchstart="setDir('down')" ontouchend="setDir(null)" onmousedown="setDir('down')" onmouseup="setDir(null)">▼</button>
     <button id="fire-btn" style="grid-column:2;grid-row:3;" ontouchstart="mobileFire()" onmousedown="mobileFire()">FIRE</button>
+  </div>
+  <div id="help-overlay" onclick="if(event.target===this)toggleHelp()">
+    <div class="manual">
+      <h2>📋 操作说明书</h2>
+
+      <h3>🎮 键盘操作</h3>
+      <div class="row"><span>移动</span><span><span class="key">↑</span> <span class="key">↓</span> <span class="key">←</span> <span class="key">→</span> 或 <span class="key">W</span> <span class="key">A</span> <span class="key">S</span> <span class="key">D</span></span></div>
+      <div class="row"><span>射击</span><span><span class="key highlight">空格</span> 或 <span class="key highlight">J</span></span></div>
+      <div class="row"><span>重新开始</span><span><span class="key">Enter</span> 或 <span class="key">R</span></span></div>
+      <div class="row"><span>打开/关闭说明书</span><span><span class="key">H</span></span></div>
+
+      <h3>📱 触屏操作</h3>
+      <div class="row"><span>移动</span><span>虚拟方向键</span></div>
+      <div class="row"><span>射击</span><span>FIRE 按钮</span></div>
+
+      <h3>🗺️ 地图元素</h3>
+      <div class="row"><span><span class="tag tag-brick">砖墙</span></span><span>可被子弹摧毁 🧱</span></div>
+      <div class="row"><span><span class="tag tag-steel">钢墙</span></span><span>不可摧毁 🔒</span></div>
+      <div class="row"><span><span class="tag tag-base">基地</span></span><span>保护目标，被击中则游戏结束 ⚠️</span></div>
+
+      <h3>🤖 单位识别</h3>
+      <div class="row"><span><span class="tag tag-player">绿色坦克</span></span><span>玩家（3 HP）</span></div>
+      <div class="row"><span><span class="tag tag-enemy">红/橙色坦克</span></span><span>敌方（1 HP / 个）</span></div>
+      <div class="row"><span>玩家子弹</span><span><span style="color:#ffeb3b">● 黄色光球</span></span></div>
+      <div class="row"><span>敌方子弹</span><span><span style="color:#ff9800">● 橙色光球</span></span></div>
+
+      <h3>⚙️ 游戏规则</h3>
+      <div class="row"><span>击杀敌人</span><span>+100 分</span></div>
+      <div class="row"><span>通关奖励</span><span>+200 分</span></div>
+      <div class="row"><span>每关敌人数</span><span>3 + 关卡 × 2</span></div>
+      <div class="row"><span>总生命数</span><span>3 条命（每次复活 3 HP）</span></div>
+      <div class="row"><span>子弹互碰</span><span>双方子弹抵消 💫</span></div>
+      <div class="row"><span>通关条件</span><span>消灭关卡内全部敌人</span></div>
+
+      <h3>💡 小提示</h3>
+      <div class="row"><span>利用砖墙作掩护，注意保护基地</span></div>
+      <div class="row"><span>敌人子弹可以打掉我方子弹</span></div>
+      <div class="row"><span>关卡越高敌人越多、越快</span></div>
+
+      <p class="note">按 <span class="key">H</span> 或点击 ❓ 按钮关闭</p>
+      <div style="text-align:center;"><button id="close-help-btn" onclick="toggleHelp()">关闭</button></div>
+    </div>
   </div>
 </div>
 
@@ -508,9 +648,24 @@ window.addEventListener('keydown', e => {
   if (e.key === 'Enter' || e.key === 'r') {
     if (gameOver) restartGame();
   }
+  if (e.key === 'h' || e.key === 'H') {
+    toggleHelp();
+  }
   e.preventDefault();
 });
 window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+// Help overlay
+function toggleHelp() {
+  const overlay = document.getElementById('help-overlay');
+  const show = overlay.style.display !== 'flex';
+  overlay.style.display = show ? 'flex' : 'none';
+  if (show) {
+    levelTransition = true; // pause game while reading
+  } else {
+    levelTransition = gameOver ? true : false;
+  }
+}
 
 // Mobile controls
 function setDir(dir) {
