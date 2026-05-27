@@ -221,6 +221,7 @@ canvas { display: block; background: #0f0f23; }
     <div class="ui-panel">🎯 关卡 <span id="level">1</span></div>
     <div class="ui-panel">❤️ <span id="lives">3</span></div>
     <div class="ui-panel">💥 <span id="enemies">0</span></div>
+    <div class="ui-panel" id="boost-panel" style="display:none;">⚡ <span id="boost-timer">0</span>s</div>
   <button id="help-btn" onclick="toggleHelp()" title="帮助 / 说明书">?</button>
   </div>
   <div id="game-over-screen">
@@ -244,14 +245,19 @@ canvas { display: block; background: #0f0f23; }
       <h2>📋 操作说明书</h2>
 
       <h3>🎮 键盘操作</h3>
-      <div class="row"><span>移动</span><span><span class="key">↑</span> <span class="key">↓</span> <span class="key">←</span> <span class="key">→</span> 或 <span class="key">W</span> <span class="key">A</span> <span class="key">S</span> <span class="key">D</span></span></div>
-      <div class="row"><span>射击</span><span><span class="key highlight">空格</span> 或 <span class="key highlight">J</span></span></div>
+      <div class="row"><span>车身移动</span><span><span class="key highlight">W</span> <span class="key highlight">A</span> <span class="key highlight">S</span> <span class="key highlight">D</span></span></div>
+      <div class="row"><span>炮塔瞄准</span><span><span class="key">↑</span> <span class="key">↓</span> <span class="key">←</span> <span class="key">→</span></span></div>
+      <div class="row"><span>射击</span><span><span class="key highlight">鼠标左键</span></span></div>
       <div class="row"><span>重新开始</span><span><span class="key">Enter</span> 或 <span class="key">R</span></span></div>
       <div class="row"><span>打开/关闭说明书</span><span><span class="key">H</span></span></div>
 
       <h3>📱 触屏操作</h3>
       <div class="row"><span>移动</span><span>虚拟方向键</span></div>
       <div class="row"><span>射击</span><span>FIRE 按钮</span></div>
+
+      <h3>🎒 道具系统</h3>
+      <div class="row"><span><span style="color:#4caf50">+ 绿色十字</span></span><span>回复 1 HP</span></div>
+      <div class="row"><span><span style="color:#ff9800">⚡ 闪电标记</span></span><span>双发子弹 10 秒</span></div>
 
       <h3>🗺️ 地图元素</h3>
       <div class="row"><span><span class="tag tag-brick">砖墙</span></span><span>可被子弹摧毁 🧱</span></div>
@@ -318,13 +324,15 @@ function playSound(freq, duration, type = 'square', vol = 0.06) {
 
 // Game state
 let score, level, lives, enemiesLeft;
-let player, enemies, bullets, walls, particles;
+let player, enemies, bullets, walls, particles, powerups;
 let keys = {};
 let gameOver = false;
 let levelTransition = false;
 let enemyMoveTimer = 0;
 let enemyShootTimer = 0;
 let playerShootCooldown = 0;
+let playerAttackBoost = 0;
+let powerupSpawnTimer = 0;
 let shakeTimer = 0;
 let shakeIntensity = 0;
 
@@ -412,6 +420,7 @@ class Tank {
   constructor(x, y, dir, color, isPlayer = false) {
     this.x = x; this.y = y;
     this.dir = dir;
+    this.moveDir = dir;
     this.color = color;
     this.speed = isPlayer ? 2.5 : 1.0 + level * 0.2;
     this.isPlayer = isPlayer;
@@ -419,6 +428,7 @@ class Tank {
     this.shootCooldown = 0;
     this.moveCooldown = 0;
     this.hp = isPlayer ? 3 : 1;
+    this.maxHp = isPlayer ? 3 : 1;
     this.flashTimer = 0;
   }
 
@@ -431,7 +441,10 @@ class Tank {
 
     ctx.save();
     ctx.translate(this.cx, this.cy);
-    ctx.rotate((this.dir * Math.PI) / 2);
+
+    // Draw body rotated by moveDir
+    ctx.save();
+    ctx.rotate((this.moveDir * Math.PI) / 2);
 
     // Tracks
     ctx.fillStyle = this.isPlayer ? '#1a5c1a' : '#5c1a1a';
@@ -451,6 +464,11 @@ class Tank {
     }
     ctx.fillStyle = grad;
     ctx.fillRect(-8, -9, 16, 18);
+    ctx.restore();
+
+    // Draw turret + barrel rotated by dir (on top of body)
+    ctx.save();
+    ctx.rotate((this.dir * Math.PI) / 2);
 
     // Barrel
     ctx.fillStyle = '#333';
@@ -469,21 +487,18 @@ class Tank {
     ctx.fill();
 
     ctx.restore();
+    ctx.restore();
   }
 
   move(dir, map) {
     if (!this.alive) return false;
-    this.dir = dir;
+    this.moveDir = dir;
     const nx = this.x + DX[dir] * this.speed;
     const ny = this.y + DY[dir] * this.speed;
 
-    // Check map bounds
     if (nx < 0 || nx > canvas.width - CELL || ny < 0 || ny > canvas.height - CELL) return false;
-
-    // Check wall collision
     if (vecInWall(nx, ny, map)) return false;
 
-    // Check tank collision
     const allTanks = this.isPlayer ? enemies : [player, ...enemies.filter(e => e !== this && e.alive)];
     if (allTanks.some(t => t && t.alive && t !== this && rectsOverlap(nx, ny, CELL, CELL, t.x, t.y, CELL, CELL))) {
       return false;
@@ -496,9 +511,20 @@ class Tank {
 
   shoot() {
     if (!this.alive || this.shootCooldown > 0) return null;
-    this.shootCooldown = this.isPlayer ? 15 : 60 - level * 3;
+    this.shootCooldown = this.isPlayer ? 12 : 60 - level * 3;
     const bx = this.cx + DX[this.dir] * 12 - 3;
     const by = this.cy + DY[this.dir] * 12 - 3;
+    const b = new Bullet(bx, by, this.dir, this.isPlayer);
+    return this.isPlayer && playerAttackBoost > 0 ? [b, this._makeSecondBullet()] : [b];
+  }
+
+  _makeSecondBullet() {
+    // Slightly offset second bullet during attack boost
+    const spread = 0.15;
+    let d2 = this.dir;
+    let offsetDir = d2 === DIR.UP ? DIR.RIGHT : d2 === DIR.RIGHT ? DIR.UP : d2 === DIR.DOWN ? DIR.RIGHT : DIR.UP;
+    const bx = this.cx + DX[this.dir] * 12 + DX[offsetDir] * 4 - 3;
+    const by = this.cy + DY[this.dir] * 12 + DY[offsetDir] * 4 - 3;
     return new Bullet(bx, by, this.dir, this.isPlayer);
   }
 }
@@ -634,17 +660,6 @@ function spawnEnemies(count) {
 // Input
 window.addEventListener('keydown', e => {
   keys[e.key] = true;
-  if (e.key === ' ' || e.key === 'j' || e.key === 'J') {
-    e.preventDefault();
-    if (player.alive && playerShootCooldown <= 0 && !gameOver && !levelTransition) {
-      const bullet = player.shoot();
-      if (bullet) {
-        bullets.push(bullet);
-        playerShootCooldown = 15;
-        playSound(600, 0.08, 'square', 0.03);
-      }
-    }
-  }
   if (e.key === 'Enter' || e.key === 'r') {
     if (gameOver) restartGame();
   }
@@ -654,6 +669,18 @@ window.addEventListener('keydown', e => {
   e.preventDefault();
 });
 window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+// Mouse click to shoot
+canvas.addEventListener('click', e => {
+  if (!player.alive || gameOver || levelTransition) return;
+  const bulletsArr = player.shoot();
+  if (bulletsArr) {
+    bulletsArr.forEach(b => bullets.push(b));
+    playerShootCooldown = 12;
+    playSound(600, 0.08, 'square', 0.03);
+  }
+});
+canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 // Help overlay
 function toggleHelp() {
@@ -673,21 +700,31 @@ function setDir(dir) {
 }
 function mobileFire() {
   if (player.alive && playerShootCooldown <= 0 && !gameOver && !levelTransition) {
-    const bullet = player.shoot();
-    if (bullet) {
-      bullets.push(bullet);
-      playerShootCooldown = 15;
+    const bulletsArr = player.shoot();
+    if (bulletsArr) {
+      bulletsArr.forEach(b => bullets.push(b));
+      playerShootCooldown = 12;
       playSound(600, 0.08, 'square', 0.03);
     }
   }
 }
 let mobileDir = null;
 
-function getInputDir() {
-  if (keys['ArrowUp'] || keys['w'] || keys['W'] || mobileDir === 'up') return DIR.UP;
-  if (keys['ArrowRight'] || keys['d'] || keys['D'] || mobileDir === 'right') return DIR.RIGHT;
-  if (keys['ArrowDown'] || keys['s'] || keys['S'] || mobileDir === 'down') return DIR.DOWN;
-  if (keys['ArrowLeft'] || keys['a'] || keys['A'] || mobileDir === 'left') return DIR.LEFT;
+function getTurretDir() {
+  // Arrow keys → turret direction (aiming)
+  if (keys['ArrowUp']) return DIR.UP;
+  if (keys['ArrowRight']) return DIR.RIGHT;
+  if (keys['ArrowDown']) return DIR.DOWN;
+  if (keys['ArrowLeft']) return DIR.LEFT;
+  return null;
+}
+
+function getMoveDir() {
+  // WASD → body movement direction
+  if (keys['w'] || keys['W']) return DIR.UP;
+  if (keys['d'] || keys['D']) return DIR.RIGHT;
+  if (keys['s'] || keys['S']) return DIR.DOWN;
+  if (keys['a'] || keys['A']) return DIR.LEFT;
   return null;
 }
 
@@ -701,9 +738,12 @@ function initGame() {
   enemiesLeft = 0;
   bullets = [];
   particles = [];
+  powerups = [];
   gameOver = false;
   levelTransition = false;
   playerShootCooldown = 0;
+  playerAttackBoost = 0;
+  powerupSpawnTimer = 300 + Math.floor(Math.random() * 300);
   shakeTimer = 0;
   shakeIntensity = 0;
   map = generateMap();
@@ -727,6 +767,82 @@ function spawnLevel() {
   enemies = spawnEnemies(count);
   enemiesLeft = count;
   updateUI();
+}
+
+// Power-ups
+function spawnPowerup() {
+  let x, y, attempts = 0;
+  do {
+    x = (1 + Math.floor(Math.random() * (COLS - 2))) * CELL;
+    y = (1 + Math.floor(Math.random() * (ROWS - 5))) * CELL;
+    attempts++;
+  } while (attempts < 30 && (map[Math.floor(y / CELL)][Math.floor(x / CELL)] !== TILE.EMPTY ||
+    enemies.some(e => e.alive && rectsOverlap(x, y, CELL, CELL, e.x, e.y, CELL, CELL)) ||
+    (player.alive && rectsOverlap(x, y, CELL, CELL, player.x, player.y, CELL, CELL))));
+
+  const types = ['health', 'health', 'attack', 'attack', 'health'];
+  const type = types[Math.floor(Math.random() * types.length)];
+  powerups.push({
+    x: x + 4, y: y + 4,
+    size: 16,
+    type: type,
+    life: 500, // frames before expiration (~8s)
+    bobOffset: Math.random() * Math.PI * 2,
+  });
+}
+
+function applyPowerup(pu) {
+  if (pu.type === 'health') {
+    player.hp = Math.min(player.hp + 1, player.maxHp);
+    spawnParticles(player.cx, player.cy, '#4caf50', 8);
+    playSound(880, 0.1, 'sine', 0.05);
+    setTimeout(() => playSound(1100, 0.1, 'sine', 0.05), 100);
+  } else if (pu.type === 'attack') {
+    playerAttackBoost = 600; // 10 seconds at 60fps
+    spawnParticles(player.cx, player.cy, '#ff9800', 12);
+    playSound(440, 0.08, 'square', 0.04);
+    setTimeout(() => playSound(660, 0.08, 'square', 0.04), 80);
+    setTimeout(() => playSound(880, 0.1, 'square', 0.04), 160);
+  }
+}
+
+function drawPowerups(ctx) {
+  powerups.forEach(pu => {
+    const bob = Math.sin(pu.bobOffset + performance.now() * 0.005) * 2;
+    const cy = pu.y + bob;
+    const t = pu.life / 500;
+
+    // Blink when about to expire
+    if (t < 0.3 && Math.floor(performance.now() / 200) % 2 === 0) return;
+
+    // Glow
+    ctx.save();
+    ctx.shadowColor = pu.type === 'health' ? '#4caf50' : '#ff9800';
+    ctx.shadowBlur = 10 + Math.sin(performance.now() * 0.008) * 4;
+
+    // Circle background
+    const grad = ctx.createRadialGradient(pu.x + 8, cy + 8, 2, pu.x + 8, cy + 8, 12);
+    if (pu.type === 'health') {
+      grad.addColorStop(0, '#fff');
+      grad.addColorStop(0.5, '#4caf50');
+      grad.addColorStop(1, 'rgba(76,175,80,0)');
+    } else {
+      grad.addColorStop(0, '#fff');
+      grad.addColorStop(0.5, '#ff9800');
+      grad.addColorStop(1, 'rgba(255,152,0,0)');
+    }
+    ctx.fillStyle = grad;
+    ctx.fillRect(pu.x - 2, cy - 2, 20, 20);
+
+    // Icon
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(pu.type === 'health' ? '+' : '⚡', pu.x + 8, cy + 8);
+
+    ctx.restore();
+  });
 }
 
 function endGame(won) {
@@ -763,9 +879,13 @@ function showLevelScreen() {
     player.y = (ROWS - 2) * CELL;
     player.alive = true;
     player.dir = DIR.UP;
+    player.moveDir = DIR.UP;
     player.hp = 3;
     bullets = [];
     particles = [];
+    powerups = [];
+    playerAttackBoost = 0;
+    powerupSpawnTimer = 300 + Math.floor(Math.random() * 300);
     enemies = [];
     spawnLevel();
     updateUI();
@@ -777,6 +897,14 @@ function updateUI() {
   document.getElementById('level').textContent = level;
   document.getElementById('lives').textContent = lives;
   document.getElementById('enemies').textContent = enemies.filter(e => e.alive).length;
+  const bp = document.getElementById('boost-panel');
+  const bt = document.getElementById('boost-timer');
+  if (playerAttackBoost > 0) {
+    bp.style.display = '';
+    bt.textContent = Math.ceil(playerAttackBoost / 60);
+  } else {
+    bp.style.display = 'none';
+  }
 }
 
 // Enemy AI
@@ -801,8 +929,8 @@ function updateEnemyAI() {
         targetDir = dy > 0 ? DIR.DOWN : DIR.UP;
       }
       enemy.dir = targetDir;
-      const bullet = enemy.shoot();
-      if (bullet) bullets.push(bullet);
+      const bulletsArr = enemy.shoot();
+      if (bulletsArr) bulletsArr.forEach(b => bullets.push(b));
     }
 
     // Random movement
@@ -831,8 +959,8 @@ function updateEnemyAI() {
 
     // Random shooting
     if (enemy.shootCooldown <= 0 && Math.random() < 0.015) {
-      const bullet = enemy.shoot();
-      if (bullet) bullets.push(bullet);
+      const bulletsArr = enemy.shoot();
+      if (bulletsArr) bulletsArr.forEach(b => bullets.push(b));
     }
   });
 }
@@ -844,19 +972,42 @@ function update() {
     return;
   }
 
-  // Player movement
+  // Player input
   if (player.alive) {
-    const inputDir = getInputDir();
-    if (inputDir !== null) {
-      player.move(inputDir, map);
+    const turretDir = getTurretDir();
+    if (turretDir !== null) {
+      player.dir = turretDir;
+    }
+    const moveDir = getMoveDir();
+    if (moveDir !== null) {
+      player.move(moveDir, map);
     }
     playerShootCooldown--;
     player.shootCooldown--;
     if (player.flashTimer > 0) player.flashTimer--;
+    if (playerAttackBoost > 0) playerAttackBoost--;
   }
 
   // Enemy AI
   updateEnemyAI();
+
+  // Power-up spawning
+  powerupSpawnTimer--;
+  if (powerupSpawnTimer <= 0 && powerups.length < 3 && !gameOver) {
+    spawnPowerup();
+    powerupSpawnTimer = 200 + Math.floor(Math.random() * 400);
+  }
+
+  // Power-up pickup
+  for (let i = powerups.length - 1; i >= 0; i--) {
+    const pu = powerups[i];
+    pu.life--;
+    if (pu.life <= 0) { powerups.splice(i, 1); continue; }
+    if (player.alive && rectsOverlap(player.x, player.y, CELL, CELL, pu.x, pu.y, pu.size, pu.size)) {
+      applyPowerup(pu);
+      powerups.splice(i, 1);
+    }
+  }
 
   // Update bullets
   for (let i = bullets.length - 1; i >= 0; i--) {
@@ -910,8 +1061,9 @@ function update() {
               player.x = Math.floor(COLS / 2) * CELL;
               player.y = (ROWS - 2) * CELL;
               player.alive = true;
-              player.hp = 3;
+              player.hp = player.maxHp;
               player.dir = DIR.UP;
+              player.moveDir = DIR.UP;
               player.flashTimer = 1.5;
               updateUI();
             }, 800);
@@ -1021,7 +1173,27 @@ function draw() {
   // Draw particles
   drawParticles(ctx);
 
+  // Draw power-ups
+  drawPowerups(ctx);
+
   ctx.restore();
+
+  // Draw attack boost indicator on player
+  if (player.alive && playerAttackBoost > 0) {
+    const sec = Math.ceil(playerAttackBoost / 60);
+    ctx.fillStyle = '#ff9800';
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('⚡B', player.cx, player.y - 14);
+    // Boost timer ring
+    const ringX = player.cx;
+    const ringY = player.y - 10;
+    ctx.strokeStyle = '#ff9800';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(ringX, ringY, 4, 0, (playerAttackBoost / 600) * Math.PI * 2);
+    ctx.stroke();
+  }
 
   // Draw player HP bar above player
   if (player.alive && player.hp > 0) {
@@ -1031,7 +1203,7 @@ function draw() {
     const by = player.y - 8;
     ctx.fillStyle = '#333';
     ctx.fillRect(bx, by, barW, barH);
-    const hpRatio = player.hp / 3;
+    const hpRatio = player.hp / player.maxHp;
     ctx.fillStyle = hpRatio > 0.6 ? '#4caf50' : hpRatio > 0.3 ? '#ff9800' : '#f44336';
     ctx.fillRect(bx, by, barW * hpRatio, barH);
   }
