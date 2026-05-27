@@ -246,8 +246,8 @@ canvas { display: block; background: #0f0f23; }
 
       <h3>🎮 键盘操作</h3>
       <div class="row"><span>车身移动</span><span><span class="key highlight">W</span> <span class="key highlight">A</span> <span class="key highlight">S</span> <span class="key highlight">D</span></span></div>
-      <div class="row"><span>炮塔瞄准</span><span><span class="key">↑</span> <span class="key">↓</span> <span class="key">←</span> <span class="key">→</span></span></div>
-      <div class="row"><span>射击</span><span><span class="key highlight">鼠标左键</span></span></div>
+      <div class="row"><span>炮塔瞄准（自动射击）</span><span><span class="key">↑</span> <span class="key">↓</span> <span class="key">←</span> <span class="key">→</span></span></div>
+      <div class="row"><span>手动射击</span><span><span class="key highlight">鼠标左键</span> 或 <span class="key highlight">空格</span></span></div>
       <div class="row"><span>重新开始</span><span><span class="key">Enter</span> 或 <span class="key">R</span></span></div>
       <div class="row"><span>打开/关闭说明书</span><span><span class="key">H</span></span></div>
 
@@ -260,7 +260,7 @@ canvas { display: block; background: #0f0f23; }
       <div class="row"><span><span style="color:#ff9800">⚡ 闪电标记</span></span><span>双发子弹 10 秒</span></div>
 
       <h3>🗺️ 地图元素</h3>
-      <div class="row"><span><span class="tag tag-brick">砖墙</span></span><span>可被子弹摧毁 🧱</span></div>
+      <div class="row"><span><span class="tag tag-brick">砖墙</span></span><span>可通行，子弹可摧毁 🧱</span></div>
       <div class="row"><span><span class="tag tag-steel">钢墙</span></span><span>不可摧毁 🔒</span></div>
       <div class="row"><span><span class="tag tag-base">基地</span></span><span>保护目标，被击中则游戏结束 ⚠️</span></div>
 
@@ -279,8 +279,9 @@ canvas { display: block; background: #0f0f23; }
       <div class="row"><span>通关条件</span><span>消灭关卡内全部敌人</span></div>
 
       <h3>💡 小提示</h3>
-      <div class="row"><span>利用砖墙作掩护，注意保护基地</span></div>
-      <div class="row"><span>敌人子弹可以打掉我方子弹</span></div>
+      <div class="row"><span>砖墙可穿行，仅钢墙和基地阻挡坦克</span></div>
+      <div class="row"><span>方向键瞄准时自动开火</span></div>
+      <div class="row"><span>敌方子弹不会误伤敌方坦克</span></div>
       <div class="row"><span>关卡越高敌人越多、越快</span></div>
 
       <p class="note">按 <span class="key">H</span> 或点击 ❓ 按钮关闭</p>
@@ -393,10 +394,7 @@ function generateMap() {
 }
 
 function vecInWall(px, py, map) {
-  // Check all 4 corners of a CELL-sized square
   const margin = 2;
-  const cx = px + CELL / 2;
-  const cy = py + CELL / 2;
   const checks = [
     [px + margin, py + margin],
     [px + CELL - margin, py + margin],
@@ -407,7 +405,8 @@ function vecInWall(px, py, map) {
     const tx = Math.floor(cx2 / CELL);
     const ty = Math.floor(cy2 / CELL);
     if (tx < 0 || tx >= COLS || ty < 0 || ty >= ROWS) return true;
-    if (map[ty][tx] !== TILE.EMPTY) return true;
+    const tile = map[ty][tx];
+    if (tile === TILE.STEEL || tile === TILE.BASE) return true;
   }
   return false;
 }
@@ -975,6 +974,7 @@ function update() {
     const turretDir = getTurretDir();
     if (turretDir !== null) {
       player.dir = turretDir;
+      tryPlayerShoot(); // auto-shoot when aiming
     }
     const moveDir = getMoveDir();
     if (moveDir !== null) {
