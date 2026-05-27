@@ -260,7 +260,7 @@ canvas { display: block; background: #0f0f23; }
       <div class="row"><span><span style="color:#ff9800">⚡ 闪电标记</span></span><span>双发子弹 10 秒</span></div>
 
       <h3>🗺️ 地图元素</h3>
-      <div class="row"><span><span class="tag tag-brick">砖墙</span></span><span>可通行，子弹可摧毁 🧱</span></div>
+      <div class="row"><span><span class="tag tag-brick">砖墙</span></span><span>阻挡坦克，可被撞碎或击毁 🧱</span></div>
       <div class="row"><span><span class="tag tag-steel">钢墙</span></span><span>不可摧毁 🔒</span></div>
       <div class="row"><span><span class="tag tag-base">基地</span></span><span>保护目标，被击中则游戏结束 ⚠️</span></div>
 
@@ -279,7 +279,7 @@ canvas { display: block; background: #0f0f23; }
       <div class="row"><span>通关条件</span><span>消灭关卡内全部敌人</span></div>
 
       <h3>💡 小提示</h3>
-      <div class="row"><span>砖墙可穿行，仅钢墙和基地阻挡坦克</span></div>
+      <div class="row"><span>砖墙可撞碎，钢墙和基地无法通过</span></div>
       <div class="row"><span>方向键瞄准时自动开火</span></div>
       <div class="row"><span>敌方子弹不会误伤敌方坦克</span></div>
       <div class="row"><span>关卡越高敌人越多、越快</span></div>
@@ -393,7 +393,8 @@ function generateMap() {
   return map;
 }
 
-function vecInWall(px, py, map) {
+// Returns: 'none' (clear), 'brick' (brick only, can break), 'solid' (steel/base, can't pass)
+function checkCollision(px, py, map) {
   const margin = 2;
   const checks = [
     [px + margin, py + margin],
@@ -401,18 +402,39 @@ function vecInWall(px, py, map) {
     [px + margin, py + CELL - margin],
     [px + CELL - margin, py + CELL - margin],
   ];
+  let hasBrick = false;
   for (const [cx2, cy2] of checks) {
     const tx = Math.floor(cx2 / CELL);
     const ty = Math.floor(cy2 / CELL);
-    if (tx < 0 || tx >= COLS || ty < 0 || ty >= ROWS) return true;
+    if (tx < 0 || tx >= COLS || ty < 0 || ty >= ROWS) return 'solid';
     const tile = map[ty][tx];
-    if (tile === TILE.STEEL || tile === TILE.BASE) return true;
+    if (tile === TILE.STEEL || tile === TILE.BASE) return 'solid';
+    if (tile === TILE.BRICK) hasBrick = true;
   }
-  return false;
+  return hasBrick ? 'brick' : 'none';
 }
 
-function snapToGrid(v) {
-  return Math.round(v / CELL) * CELL;
+// Destroy bricks under the given rect (used when tank smashes through)
+function smashBricks(px, py, map) {
+  const margin = 2;
+  const checks = [
+    [px + margin, py + margin],
+    [px + CELL - margin, py + margin],
+    [px + margin, py + CELL - margin],
+    [px + CELL - margin, py + CELL - margin],
+  ];
+  const smashed = new Set();
+  for (const [cx2, cy2] of checks) {
+    const tx = Math.floor(cx2 / CELL);
+    const ty = Math.floor(cy2 / CELL);
+    const key = tx + ',' + ty;
+    if (!smashed.has(key) && tx >= 0 && tx < COLS && ty >= 0 && ty < ROWS && map[ty][tx] === TILE.BRICK) {
+      smashed.add(key);
+      map[ty][tx] = TILE.EMPTY;
+      spawnParticles(tx * CELL + CELL / 2, ty * CELL + CELL / 2, '#c49a4a', 4);
+    }
+  }
+  if (smashed.size > 0) playSound(80, 0.08, 'square', 0.03);
 }
 
 class Tank {
@@ -492,12 +514,14 @@ class Tank {
   move(dir, map) {
     if (!this.alive) return false;
     this.moveDir = dir;
-    if (!this.isPlayer) this.dir = dir; // enemies face movement direction
+    if (!this.isPlayer) this.dir = dir;
     const nx = this.x + DX[dir] * this.speed;
     const ny = this.y + DY[dir] * this.speed;
 
     if (nx < 0 || nx > canvas.width - CELL || ny < 0 || ny > canvas.height - CELL) return false;
-    if (vecInWall(nx, ny, map)) return false;
+    const col = checkCollision(nx, ny, map);
+    if (col === 'solid') return false;
+    if (col === 'brick') smashBricks(nx, ny, map); // break through bricks
 
     const allTanks = this.isPlayer ? enemies : [player, ...enemies.filter(e => e !== this && e.alive)];
     if (allTanks.some(t => t && t.alive && t !== this && rectsOverlap(nx, ny, CELL, CELL, t.x, t.y, CELL, CELL))) {
@@ -644,7 +668,7 @@ function spawnEnemies(count) {
     for (let attempt = 0; attempt < 10; attempt++) {
       const sx = (1 + Math.floor(Math.random() * (COLS - 2))) * CELL;
       const sy = (1 + Math.floor(Math.random() * 3)) * CELL;
-      if (!vecInWall(sx, sy, map) && !enemies.some(e => e.alive && rectsOverlap(sx, sy, CELL, CELL, e.x, e.y, CELL, CELL))) {
+      if (checkCollision(sx, sy, map) !== 'solid' && !enemies.some(e => e.alive && rectsOverlap(sx, sy, CELL, CELL, e.x, e.y, CELL, CELL))) {
         tank.x = sx; tank.y = sy;
         break;
       }
