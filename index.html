@@ -493,6 +493,7 @@ class Tank {
   move(dir, map) {
     if (!this.alive) return false;
     this.moveDir = dir;
+    if (!this.isPlayer) this.dir = dir; // enemies face movement direction
     const nx = this.x + DX[dir] * this.speed;
     const ny = this.y + DY[dir] * this.speed;
 
@@ -519,10 +520,7 @@ class Tank {
   }
 
   _makeSecondBullet() {
-    // Slightly offset second bullet during attack boost
-    const spread = 0.15;
-    let d2 = this.dir;
-    let offsetDir = d2 === DIR.UP ? DIR.RIGHT : d2 === DIR.RIGHT ? DIR.UP : d2 === DIR.DOWN ? DIR.RIGHT : DIR.UP;
+    const offsetDir = this.dir === DIR.UP ? DIR.RIGHT : this.dir === DIR.RIGHT ? DIR.UP : this.dir === DIR.DOWN ? DIR.RIGHT : DIR.UP;
     const bx = this.cx + DX[this.dir] * 12 + DX[offsetDir] * 4 - 3;
     const by = this.cy + DY[this.dir] * 12 + DY[offsetDir] * 4 - 3;
     return new Bullet(bx, by, this.dir, this.isPlayer);
@@ -880,7 +878,7 @@ function showLevelScreen() {
     player.alive = true;
     player.dir = DIR.UP;
     player.moveDir = DIR.UP;
-    player.hp = 3;
+    player.hp = player.maxHp;
     bullets = [];
     particles = [];
     powerups = [];
